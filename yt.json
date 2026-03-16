@@ -1,0 +1,182 @@
+{
+  "name": "Kids YouTube Automation – Enterprise",
+  "settings": {
+    "errorWorkflow": "Kids YouTube Error Handler"
+  },
+  "nodes": [
+    {
+      "id": 1,
+      "name": "Daily Cron",
+      "type": "n8n-nodes-base.cron",
+      "position": [200, 300],
+      "parameters": {
+        "triggerTimes": {
+          "item": [{ "hour": 9, "minute": 0 }]
+        }
+      }
+    },
+
+    {
+      "id": 2,
+      "name": "Trending Topics (Kids)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [420, 300],
+      "parameters": {
+        "url": "https://serpapi.com/search.json?q=kids+education&engine=google_trends",
+        "method": "GET",
+        "responseFormat": "json"
+      }
+    },
+
+    {
+      "id": 3,
+      "name": "Age Router",
+      "type": "n8n-nodes-base.switch",
+      "position": [640, 300],
+      "parameters": {
+        "value1": "={{Math.random() < 0.5 ? '4-6' : '7-9'}}",
+        "rules": [
+          { "operation": "equal", "value2": "4-6" },
+          { "operation": "equal", "value2": "7-9" }
+        ]
+      }
+    },
+
+    {
+      "id": 4,
+      "name": "Topic Polisher",
+      "type": "n8n-nodes-base.openAi",
+      "position": [860, 300],
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Polish this topic for kids age {{$json.age}}. Make it safe, fun, educational: {{$json.trending}}"
+      }
+    },
+
+    {
+      "id": 5,
+      "name": "Generate Scripts",
+      "type": "n8n-nodes-base.openAi",
+      "position": [1080, 300],
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Create:\n1) 45s short script\n2) 7min long script\nFor kids age {{$json.age}}.\nTopic: {{$json.text}}"
+      }
+    },
+
+    {
+      "id": 6,
+      "name": "Safety Filter",
+      "type": "n8n-nodes-base.function",
+      "position": [1300, 300],
+      "parameters": {
+        "functionCode": "const banned=['violence','blood','death','kill','scary','fear'];const t=JSON.stringify($json).toLowerCase();for(const b of banned){if(t.includes(b)) throw new Error('Unsafe Kids Content');}return $input.all();"
+      }
+    },
+
+    {
+      "id": 7,
+      "name": "Language Router",
+      "type": "n8n-nodes-base.switch",
+      "position": [1520, 300],
+      "parameters": {
+        "value1": "={{Math.random() < 0.7 ? 'EN' : 'ES'}}",
+        "rules": [
+          { "operation": "equal", "value2": "EN" },
+          { "operation": "equal", "value2": "ES" }
+        ]
+      }
+    },
+
+    {
+      "id": 8,
+      "name": "Translate ES",
+      "type": "n8n-nodes-base.openAi",
+      "position": [1740, 420],
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Translate into simple Spanish for kids: {{$json.text}}"
+      }
+    },
+
+    {
+      "id": 9,
+      "name": "Generate Voice",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1740, 180],
+      "parameters": {
+        "url": "https://api.elevenlabs.io/v1/text-to-speech/VOICE_ID",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "{ \"text\": \"{{$json.text}}\", \"voice_settings\": { \"stability\": 0.6, \"clarity\": 0.7 } }"
+      }
+    },
+
+    {
+      "id": 10,
+      "name": "Thumbnail Generator",
+      "type": "n8n-nodes-base.openAi",
+      "position": [1960, 180],
+      "parameters": {
+        "model": "gpt-4",
+        "prompt": "Create a colorful cartoon thumbnail idea for kids about {{$json.text}}"
+      }
+    },
+
+    {
+      "id": 11,
+      "name": "Render Video",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [2180, 300],
+      "parameters": {
+        "command": "ffmpeg -loop 1 -i thumb.png -i voice.mp3 -c:v libx264 -t 60 -pix_fmt yuv420p output.mp4"
+      }
+    },
+
+    {
+      "id": 12,
+      "name": "Upload to YouTube",
+      "type": "n8n-nodes-base.youtube",
+      "position": [2400, 300],
+      "parameters": {
+        "operation": "upload",
+        "additionalFields": {
+          "privacyStatus": "public",
+          "selfDeclaredMadeForKids": true
+        }
+      }
+    },
+
+    {
+      "id": 13,
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [2620, 300],
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID",
+        "range": "Logs!A:E",
+        "data": "={{[$json.title,$json.language,$json.age,new Date().toISOString(),'SUCCESS']}}"
+      }
+    }
+  ],
+
+  "connections": {
+    "Daily Cron": { "main": [[{ "node": "Trending Topics (Kids)", "type": "main" }]] },
+    "Trending Topics (Kids)": { "main": [[{ "node": "Age Router", "type": "main" }]] },
+    "Age Router": { "main": [[{ "node": "Topic Polisher", "type": "main" }]] },
+    "Topic Polisher": { "main": [[{ "node": "Generate Scripts", "type": "main" }]] },
+    "Generate Scripts": { "main": [[{ "node": "Safety Filter", "type": "main" }]] },
+    "Safety Filter": { "main": [[{ "node": "Language Router", "type": "main" }]] },
+    "Language Router": {
+      "main": [
+        [{ "node": "Generate Voice", "type": "main" }],
+        [{ "node": "Translate ES", "type": "main" }]
+      ]
+    },
+    "Generate Voice": { "main": [[{ "node": "Thumbnail Generator", "type": "main" }]] },
+    "Thumbnail Generator": { "main": [[{ "node": "Render Video", "type": "main" }]] },
+    "Render Video": { "main": [[{ "node": "Upload to YouTube", "type": "main" }]] },
+    "Upload to YouTube": { "main": [[{ "node": "Log to Google Sheets", "type": "main" }]] }
+  }
+}
