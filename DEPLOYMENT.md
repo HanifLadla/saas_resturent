@@ -13,8 +13,8 @@
 
 1. **Clone Repository**
 ```bash
-git clone <repository> qb-restaurant-system
-cd qb-restaurant-system
+git clone <repository> saas_resturent
+cd saas_resturent
 ```
 
 2. **Install Dependencies**
